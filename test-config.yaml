@@ -1,0 +1,6 @@
+---
+discover_configs:
+  - url: http://127.0.0.1:8080/discover
+    refresh_interval: 10s
+    timeout: 1s
+    file: /tmp/discover.json

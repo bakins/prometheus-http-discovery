@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -46,15 +45,7 @@ discover_configs:
 
 	require.Len(t, d.targets, 1)
 
-	err = d.targets[0].discover(context.Background())
-	require.NoError(t, err)
-
-	data, err := ioutil.ReadFile(testOutputFile)
-	require.NoError(t, err)
-
-	var tgs []targetGroup
-
-	err = json.Unmarshal(data, &tgs)
+	tgs, err := d.targets[0].refresh(context.Background())
 	require.NoError(t, err)
 
 	require.Len(t, tgs, 1)

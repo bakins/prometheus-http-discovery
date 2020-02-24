@@ -1,28 +1,30 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
+	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	prom_config "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
-	"golang.org/x/sync/errgroup"
+	"github.com/prometheus/prometheus/discovery/refresh"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
+	"github.com/prometheus/prometheus/documentation/examples/custom-sd/adapter"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -37,9 +39,15 @@ var (
 	)
 )
 
+func init() {
+	prometheus.MustRegister(discoverTotal)
+}
+
 func main() {
 	var (
-		config = kingpin.Flag("config", "discovery configuration file name.").Default("discover.yaml").String()
+		config          = kingpin.Flag("config", "discovery configuration file name.").Default("discover.yaml").String()
+		listenAddress   = kingpin.Flag("web.listen-address", "The address on which to expose the web interface and generated Prometheus metrics.").Default(":12852").String()
+		metricsEndpoint = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").String()
 	)
 
 	promlogConfig := &promlog.Config{}
@@ -63,21 +71,13 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
-	g, ctx := errgroup.WithContext(ctx)
+	go d.run(ctx)
 
-	g.Go(func() error {
-		return d.run(ctx)
-	})
+	go serveHTTP(ctx, *listenAddress, *metricsEndpoint, logger)
 
-	g.Go(func() error {
-		<-signals
-		cancel()
-		return nil
-	})
+	<-signals
 
-	if err := g.Wait(); err != nil {
-		_ = level.Error(logger).Log("runtime error", "error", err)
-	}
+	cancel()
 }
 
 // Discovery is a collection of targets.
@@ -172,7 +172,7 @@ func newDiscovery(cfg *config, logger log.Logger) (*Discovery, error) {
 	}
 
 	for _, c := range cfg.DiscoverConfigs {
-		rt, err := prom_config.NewRoundTripperFromConfig(c.HTTPClientConfig, "discover", false)
+		rt, err := prom_config.NewRoundTripperFromConfig(c.HTTPClientConfig, "http_sd", false)
 		if err != nil {
 			return nil, err
 		}
@@ -201,31 +201,30 @@ func newDiscovery(cfg *config, logger log.Logger) (*Discovery, error) {
 	return d, nil
 }
 
-func (d *Discovery) run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
+func (d *Discovery) run(ctx context.Context) {
+	var wg sync.WaitGroup
 
 	for _, t := range d.targets {
-		g.Go(func() error {
-			// initial discovery
-			err := t.discover(ctx)
-			t.recordMetrics(err)
+		t := t
 
-			tick := time.NewTicker(time.Duration(t.config.RefreshInterval))
+		wg.Add(1)
 
-			for {
-				select {
-				case <-ctx.Done():
-					tick.Stop()
-					return nil
-				case <-tick.C:
-					err := t.discover(ctx)
-					t.recordMetrics(err)
-				}
-			}
-		})
+		r := refresh.NewDiscovery(
+			t.logger,
+			"http_sd",
+			time.Duration(t.config.RefreshInterval),
+			t.refresh,
+		)
+
+		go func() {
+			defer wg.Done()
+
+			a := adapter.NewAdapter(ctx, t.config.File, t.url, r, t.logger)
+			a.Run()
+		}()
 	}
 
-	return g.Wait()
+	wg.Wait()
 }
 
 func (t *target) recordMetrics(err error) {
@@ -239,13 +238,21 @@ func (t *target) recordMetrics(err error) {
 	discoverTotal.WithLabelValues(t.url, status).Add(1)
 }
 
-// see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config
+// based on https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config
 type targetGroup struct {
 	Targets []string          `json:"targets"`
 	Labels  map[string]string `json:"labels,omitempty"`
 }
 
-func (t *target) discover(ctx context.Context) error {
+func (t *target) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
+	groups, err := t.discover(ctx)
+
+	t.recordMetrics(err)
+
+	return groups, err
+}
+
+func (t *target) discover(ctx context.Context) ([]*targetgroup.Group, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(t.config.Timeout))
 	defer cancel()
 
@@ -253,70 +260,77 @@ func (t *target) discover(ctx context.Context) error {
 
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to get url %w", err)
+		return nil, fmt.Errorf("failed to get url %w", err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected HTTP status %d", resp.StatusCode)
+		return nil, fmt.Errorf("unexpected HTTP status %d", resp.StatusCode)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read response body %w", err)
+		return nil, fmt.Errorf("failed to read response body %w", err)
 	}
 
-	var tgs []targetGroup
+	raw := []targetGroup{}
 
-	// ensure it is valid json
-	if err := json.Unmarshal(body, &tgs); err != nil {
-		return fmt.Errorf("failed to parse response body %w", err)
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("failed to parse response body %w", err)
 	}
 
-	data, err := json.Marshal(tgs)
-	if err != nil {
-		return fmt.Errorf("failed to marshal targetgroups %w", err)
+	var out []*targetgroup.Group
+
+	for i, r := range raw {
+		tg := targetgroup.Group{
+			Source:  strconv.Itoa(i),
+			Targets: make([]model.LabelSet, 0, len(r.Targets)),
+			Labels:  make(model.LabelSet),
+		}
+
+		for _, addr := range r.Targets {
+			target := model.LabelSet{model.AddressLabel: model.LabelValue(addr)}
+			tg.Targets = append(tg.Targets, target)
+		}
+
+		for name, value := range r.Labels {
+			label := model.LabelSet{model.LabelName(name): model.LabelValue(value)}
+			tg.Labels = tg.Labels.Merge(label)
+		}
+
+		out = append(out, &tg)
 	}
 
-	if err := atomicWrite(t.config.File, 0644, data); err != nil {
-		return fmt.Errorf("failed to write file %w", err)
-	}
-
-	return nil
+	return out, nil
 }
 
-func atomicWrite(filename string, mode os.FileMode, data []byte) error {
-	dir, file := filepath.Split(filename)
+func serveHTTP(ctx context.Context, listenAddress, metricsEndpoint string, logger log.Logger) {
+	http.Handle(metricsEndpoint, promhttp.Handler())
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html>
+			<head><title>StatsD Exporter</title></head>
+			<body>
+			<h1>StatsD Exporter</h1>
+			<p><a href="` + metricsEndpoint + `">Metrics</a></p>
+			</body>
+			</html>`))
+	})
 
-	f, err := ioutil.TempFile(dir, ".tmp."+file)
-	if err != nil {
-		return err
+	svr := http.Server{
+		Addr: listenAddress,
 	}
 
-	name := f.Name()
+	go func() {
+		<-ctx.Done()
 
-	defer func() {
-		_ = os.Remove(name)
+		ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+		defer cancel()
+
+		_ = svr.Shutdown(ctx)
 	}()
 
-	defer f.Close()
-
-	if _, err := io.Copy(f, bytes.NewReader(data)); err != nil {
-		return err
+	if err := svr.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		_ = level.Error(logger).Log("server failed", "error", err)
 	}
-
-	if err := f.Sync(); err != nil {
-		return err
-	}
-
-	if err := f.Close(); err != nil {
-		return err
-	}
-
-	if err := os.Chmod(name, mode); err != nil {
-		return err
-	}
-
-	return os.Rename(name, filename)
 }
