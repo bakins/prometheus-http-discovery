@@ -13,7 +13,7 @@ jobs:
       - image: golangci/golangci-lint:v1.23.6-alpine
     steps:
       - checkout
-      -run: golangci-lint run
+      - run: golangci-lint run
   release:
     docker:
       - image: circleci/golang:1.13
