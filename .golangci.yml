@@ -1,0 +1,31 @@
+run:
+  tests: true
+  modules-download-mode: vendor
+  skip-dirs:
+  - vendor
+linters:
+  disable-all: true
+  enable:
+  - deadcode
+  - errcheck
+  - goconst
+  - goimports
+  - golint
+  - gosimple
+  - govet
+  - ineffassign
+  - nakedret
+  - staticcheck
+  - structcheck
+  - unused
+  - varcheck
+  - whitespace
+  - wsl
+linters-settings:
+  govet:
+    check-shadowing: true
+issues:
+  exclude-use-default: false
+  exclude:
+  - Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv). is not checked
+  - 'shadow: declaration of "(err|ctx)" shadows declaration at line (\d+)'
