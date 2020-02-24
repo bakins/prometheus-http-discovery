@@ -8,6 +8,12 @@ jobs:
     steps:
       - checkout
       - run: go test -v ./...
+  lint:
+    docker:
+      - image: golangci/golangci-lint:v1.23.6-alpine
+    steps:
+      - checkout
+      -run: golangci-lint run
   release:
     docker:
       - image: circleci/golang:1.13
@@ -19,9 +25,11 @@ workflows:
   test_and_release:
     jobs:
       - test
+      - lint
       - release:
           requires:
           - test
+          - lint
           filters:
             branches:
               ignore: /.*/
