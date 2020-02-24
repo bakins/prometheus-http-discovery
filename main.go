@@ -32,7 +32,7 @@ import (
 var (
 	discoverTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "http_discover_total",
+			Name: "prometheus_sd_http_calls_total",
 			Help: "The total number of HTTP discover calls.",
 		},
 		[]string{"url", "status"},
