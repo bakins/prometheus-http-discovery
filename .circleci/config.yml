@@ -36,9 +36,9 @@ jobs:
     - run:
         name: "push docker image"
         command: |
-        echo ${DOCKER_TOKEN} | docker login --username=bakins --password-stdin
-        docker tag bakins/prometheus-http-discovery:${CIRCLE_SHA1} bakins/prometheus-http-discovery:${CIRCLE_TAG}
-        docker push bakins/prometheus-http-discovery:${CIRCLE_TAG}
+          echo ${DOCKER_TOKEN} | docker login --username=bakins --password-stdin
+          docker tag bakins/prometheus-http-discovery:${CIRCLE_SHA1} bakins/prometheus-http-discovery:${CIRCLE_TAG}
+          docker push bakins/prometheus-http-discovery:${CIRCLE_TAG}
 
 workflows:
   version: 2
