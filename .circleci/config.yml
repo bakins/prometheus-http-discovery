@@ -26,7 +26,7 @@ jobs:
     steps:
     - checkout
     - setup_remote_docker
-    - run: docker build -t bakins/prometheus-http-discovery:${CIRCLE_TAG} .
+    - run: docker build -t bakins/prometheus-http-discovery:${CIRCLE_SHA1} .
   push:
     docker:
       - image: docker:stable
@@ -35,6 +35,7 @@ jobs:
     - setup_remote_docker
     - command: |
         echo ${DOCKER_TOKEN} | docker login --username=bakins --password-stdin
+        docker tag bakins/prometheus-http-discovery:${CIRCLE_SHA1} bakins/prometheus-http-discovery:${CIRCLE_TAG}
         docker push bakins/prometheus-http-discovery:${CIRCLE_TAG}
 
 workflows:
