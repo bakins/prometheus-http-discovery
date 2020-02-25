@@ -44,12 +44,12 @@ workflows:
     jobs:
       - test
       - lint
-      - build
-      - push
+      - build:
+          requires:
+            - test
+            - lint
       - release:
           requires:
-          - test
-          - lint
           - build
           filters:
             branches:
@@ -58,8 +58,6 @@ workflows:
               only: /v[0-9]+(\.[0-9]+)*(-.*)*/
       - push:
           requires:
-          - test
-          - lint
           - build
           filters:
             branches:
