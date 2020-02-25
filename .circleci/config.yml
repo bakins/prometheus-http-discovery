@@ -50,7 +50,7 @@ workflows:
             - lint
       - release:
           requires:
-          - build
+            - build
           filters:
             branches:
               ignore: /.*/
@@ -58,7 +58,7 @@ workflows:
               only: /.*/
       - push:
           requires:
-          - build
+            - build
           filters:
             branches:
               ignore: /.*/
