@@ -26,7 +26,7 @@ jobs:
     steps:
     - checkout
     - setup_remote_docker
-    - run: docker build -t bakins/prometheus-http-discovery:${CIRCLE_TAG}
+    - run: docker build -t bakins/prometheus-http-discovery:${CIRCLE_TAG} .
   push:
     docker:
       - image: docker:stable
