@@ -1,4 +1,4 @@
-version: 2.1
+version: 2
 jobs:
   test:
     docker:
@@ -8,63 +8,22 @@ jobs:
     steps:
       - checkout
       - run: go test -v ./...
-  lint:
-    docker:
-      - image: golangci/golangci-lint:v1.23.6-alpine
-    steps:
-      - checkout
-      - run: golangci-lint run
   release:
     docker:
       - image: circleci/golang:1.13
     steps:
       - checkout
       - run: ./script/release
-  build:
-    docker:
-      - image: docker:stable
-    steps:
-    - checkout
-    - setup_remote_docker
-    - run: docker build -t bakins/prometheus-http-discovery:${CIRCLE_SHA1} .
-  push:
-    docker:
-      - image: docker:stable
-    steps:
-    - checkout
-    - setup_remote_docker
-    - run:
-        name: "push docker image"
-        command: |
-          echo ${DOCKER_TOKEN} | docker login --username=bakins --password-stdin
-          docker tag bakins/prometheus-http-discovery:${CIRCLE_SHA1} bakins/prometheus-http-discovery:${CIRCLE_TAG}
-          docker push bakins/prometheus-http-discovery:${CIRCLE_TAG}
-
 workflows:
   version: 2
   test_and_release:
     jobs:
       - test
-      - lint
-      - build:
-          requires:
-            - test
-            - lint
       - release:
           requires:
-            - test
-            - lint
-            - build
+          - test
           filters:
             branches:
               ignore: /.*/
             tags:
               only: /v[0-9]+(\.[0-9]+)*(-.*)*/
-      # - push:
-      #     requires:
-      #       - build
-      #     filters:
-      #       branches:
-      #         ignore: /.*/
-      #       tags:
-      #         only: /.*/
