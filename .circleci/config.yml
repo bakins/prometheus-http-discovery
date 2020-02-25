@@ -58,11 +58,11 @@ workflows:
               ignore: /.*/
             tags:
               only: /.*/
-      - push:
-          requires:
-            - build
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /.*/
+      # - push:
+      #     requires:
+      #       - build
+      #     filters:
+      #       branches:
+      #         ignore: /.*/
+      #       tags:
+      #         only: /.*/
