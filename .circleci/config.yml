@@ -40,34 +40,26 @@ jobs:
 
 workflows:
   version: 2
-  test_and_release:
+  test:
     jobs:
-      - test:
-          filters:
-            tags:
-              only: /.*/
-      - lint:
-          filters:
-            tags:
-              only: /.*/
-      - build:
-          requires:
-            - test
-            - lint
-          filters:
-            tags:
-              only: /.*/
+      - test
+      - lint
+      - build
+  release:
+    jobs:
       - release:
-          requires:
-            - build
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*(-.*)*/
+      - build:
           filters:
             branches:
               ignore: /.*/
             tags:
               only: /v[0-9]+(\.[0-9]+)*(-.*)*/
       - push:
-          requires:
-            - build
           filters:
             branches:
               ignore: /.*/
