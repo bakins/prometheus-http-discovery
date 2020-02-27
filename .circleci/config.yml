@@ -22,14 +22,14 @@ jobs:
       - run: ./script/release
   build:
     docker:
-      - image: docker:stable
+      - image: circleci/golang:1.13
     steps:
     - checkout
     - setup_remote_docker
     - run: docker build -t bakins/prometheus-http-discovery:${CIRCLE_SHA1} .
   push:
     docker:
-      - image: docker:stable
+      - image: circleci/golang:1.13
     steps:
     - checkout
     - setup_remote_docker
