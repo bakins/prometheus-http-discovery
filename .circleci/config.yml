@@ -54,6 +54,9 @@ workflows:
           requires:
             - test
             - lint
+          filters:
+            tags:
+              only: /.*/
       - release:
           requires:
             - build
