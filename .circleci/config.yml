@@ -3,8 +3,6 @@ jobs:
   test:
     docker:
       - image: circleci/golang:1.13
-        environment:
-          GOFLAGS: -mod=vendor
     steps:
       - checkout
       - run: go test -mod=vendor -v ./...
@@ -14,12 +12,6 @@ jobs:
     steps:
       - checkout
       - run: golangci-lint run
-  release:
-    docker:
-      - image: circleci/golang:1.14
-    steps:
-      - checkout
-      - run: ./script/release
   build:
     docker:
       - image: circleci/golang:1.14
@@ -49,12 +41,6 @@ workflows:
       - build
   release:
     jobs:
-      - release:
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /v[0-9]+(\.[0-9]+)*(-.*)*/
       - push:
           filters:
             branches:
