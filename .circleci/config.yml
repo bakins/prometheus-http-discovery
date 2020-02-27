@@ -38,7 +38,10 @@ workflows:
     jobs:
       - test
       - lint
-      - build
+      - build:
+          requires:
+            - test
+            - lint
   release:
     jobs:
       - push:
