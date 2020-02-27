@@ -16,20 +16,20 @@ jobs:
       - run: golangci-lint run
   release:
     docker:
-      - image: circleci/golang:1.13
+      - image: circleci/golang:1.14
     steps:
       - checkout
       - run: ./script/release
   build:
     docker:
-      - image: circleci/golang:1.13
+      - image: circleci/golang:1.14
     steps:
     - checkout
     - setup_remote_docker
     - run: docker build -t bakins/prometheus-http-discovery:${CIRCLE_SHA1} .
   push:
     docker:
-      - image: circleci/golang:1.13
+      - image: circleci/golang:1.14
     steps:
     - checkout
     - setup_remote_docker

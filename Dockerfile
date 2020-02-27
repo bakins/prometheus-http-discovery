@@ -1,4 +1,4 @@
-FROM circleci/golang:1.13 AS builder
+FROM circleci/golang:1.14 AS builder
  
 ARG CGO_ENABLED=0
 ARG GOOS=linux
