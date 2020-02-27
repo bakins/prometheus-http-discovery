@@ -56,7 +56,7 @@ workflows:
             - lint
       - release:
           requires:
-          - build
+            - build
           filters:
             branches:
               ignore: /.*/
@@ -64,7 +64,7 @@ workflows:
               only: /v[0-9]+(\.[0-9]+)*(-.*)*/
       - push:
           requires:
-          - build
+            - build
           filters:
             branches:
               ignore: /.*/
