@@ -7,7 +7,7 @@ jobs:
           GOFLAGS: -mod=vendor
     steps:
       - checkout
-      - run: go test -v ./...
+      - run: go test -mod=vendor -v ./...
   lint:
     docker:
       - image: golangci/golangci-lint:v1.23.6-alpine
